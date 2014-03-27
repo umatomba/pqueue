@@ -1,18 +1,35 @@
--module(pqueue_proper).
--ifdef(TEST).
+-module(pqueue_SUITE).
+
 -include_lib("proper/include/proper.hrl").
 
 -behaviour(proper_statem).
 
+-compile(export_all).
 -export([qc_pq/0, qc_pq2/0, qc_pq3/0, qc_pq4/0, correct/1]).
-
--export([command/1, initial_state/0, next_state/3, postcondition/3,
-         precondition/2]).
+-export([command/1, initial_state/0, next_state/3, postcondition/3, precondition/2]).
 
 -type value() :: integer().
 -record(state, { in_queue :: [{value(), term()}] }).
--define(SERVER, queue_srv).
 
+%%%===================================================================
+%%% Common test configuration
+%%%===================================================================
+all() -> [pqueue].
+
+init_per_testcase(TestCase, _Config) ->
+    io:format(user, "TestCase: ~p~n", [TestCase]),
+    [{testcase, TestCase}].
+
+%%%===================================================================
+%%% Test Cases
+%%%===================================================================
+pqueue(Config) ->
+    TestCase = proplists:get_value(testcase, Config),
+    true = proper:quickcheck(pqueue_SUITE:correct(TestCase), {to_file, user}).
+    
+%%%===================================================================
+%%% PropEr Cases
+%%%===================================================================   
 priority() ->
     integer(-20, 20).
 
@@ -27,15 +44,15 @@ initial_state() ->
     #state { in_queue = [] }.
 
 command(#state { in_queue = InQ }) ->
-    oneof([{call, ?SERVER, in, [value()]},
-           {call, ?SERVER, in, [value(), priority()]},
-           {call, ?SERVER, is_empty, []},
-           {call, ?SERVER, is_queue, []},
-           {call, ?SERVER, len, []},
-           {call, ?SERVER, out, []}] ++
-          [{call, ?SERVER, out, [priority(InQ)]} || InQ =/= []] ++
-          [{call, ?SERVER, pout, []},
-           {call, ?SERVER, to_list, []}]).
+    oneof([{call, queue_srv, in, [value()]},
+           {call, queue_srv, in, [value(), priority()]},
+           {call, queue_srv, is_empty, []},
+           {call, queue_srv, is_queue, []},
+           {call, queue_srv, len, []},
+           {call, queue_srv, out, []}] ++
+          [{call, queue_srv, out, [priority(InQ)]} || InQ =/= []] ++
+          [{call, queue_srv, pout, []},
+           {call, queue_srv, to_list, []}]).
 
 next_state(#state { in_queue = InQ } = S, _V, {call, _, out, []}) ->
     S#state { in_queue = listq_rem(InQ) };
@@ -77,10 +94,10 @@ correct(M) ->
     ?FORALL(Cmds, commands(?MODULE),
             ?TRAPEXIT(
                 begin
-                    ?SERVER:start_link(M),
+                    queue_srv:start_link(M),
                     {History,State,Result} = run_commands(?MODULE, Cmds),
-                    ?SERVER:stop(),
-                    ?WHENFAIL(io:format("History: ~w\nState: ~w\nResult: ~w\n",
+                    queue_srv:stop(),
+                    ?WHENFAIL(io:format(user, "History: ~w\nState: ~w\nResult: ~w\n",
                                         [History,State,Result]),
                               aggregate(command_names(Cmds), Result =:= ok))
                 end)).
@@ -152,5 +169,3 @@ listq_ppeek([]) ->
     empty;
 listq_ppeek([{P, [V | _]} | _]) ->
     {value, V, P}.
-
--endif.

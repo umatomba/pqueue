@@ -1,4 +1,0 @@
-%% encoding: UTF-8
-{application,pqueue}.
-{packages,[]}.
-{modules,[pqueue,pqueue2,pqueue3,pqueue4]}.
